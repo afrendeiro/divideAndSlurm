@@ -31,7 +31,7 @@ class DivideAndSlurm(object):
         self.tmpDir = _os.path.abspath(tmpDir)
         self.logDir = _os.path.abspath(logDir)
 
-        self.userMail = userMail #arendeiro@cemm.oeaw.ac.at
+        self.userMail = userMail
 
     def __repr__(self):
         return "DivideAndSlurm object " + self.name
@@ -82,7 +82,7 @@ class DivideAndSlurm(object):
         if task not in self.tasks:
             raise AttributeError("Task not in object's tasks.")
         if not hasattr(task, "jobIDs"):
-            return False
+            raise AttributeError("Task does not have jobs initiated.")
         for jobID in task.jobIDs:
             command = "scancel %s" % jobID
             p = _subprocess.Popen(command, stdout=_subprocess.PIPE, shell=True)            
@@ -91,7 +91,7 @@ class DivideAndSlurm(object):
         """
         Remove task from object.
         """
-        del self.tasks[self.tasks.index(task)]
+        return self.tasks.pop(self.tasks.index(task))
 
 
 
@@ -102,11 +102,18 @@ class Task(object):
     It will divide the input data into pools, which can be be submitted in parallel to the cluster by the DivideAndSlurm object.
     Divided input can also be further processed in parallel, taking advantage of all CPUs.
     """
-    def __init__(self, data, fractions):
+    def __init__(self, data, fractions, queue="shortq", ntasks=1, time="10:00:00", cpusPerTask=16, memPerCpu=2000, nodes=1):
         super(Task, self).__init__()
 
         self.name = "Task created at {0}".format(_time.strftime("%Y%m%d%H%M%S", _time.localtime()))
+
+        # check data is iterable
+        if type(self.data) == dict or type(self.data) == OrderedDict:
+            data = data.items() # implicit type transformation
         self.data = data
+        # check fractions is int
+        if type(fractions) != int:
+            raise TypeError("Fractions must be an integer.")
         self.fractions = fractions
 
     def __repr__(self):
@@ -115,7 +122,7 @@ class Task(object):
     def __str__(self):
         return "Task object " + self.name
 
-    def _slurmHeader(self, jobName, output, queue="shortq", ntasks=1, time="10:00:00", cpusPerTask=16, memPerCpu=2000, nodes=1, userMail=""):
+    def _slurmHeader(self, jobName, output):
         command = """            #!/bin/bash
             #SBATCH --partition={0}
             #SBATCH --ntasks={1}
@@ -131,28 +138,22 @@ class Task(object):
             #SBATCH --mail-type=end
             #SBATCH --mail-user={8}
 
-            # Activate virtual environment
-            source /home/arendeiro/venv/bin/activate
-
             # Start running the job
             hostname
             date
 
-        """.format(queue, ntasks, time, cpusPerTask, memPerCpu, nodes, jobName, output, userMail)
-        return command
+            """.format(self.queue, self.ntasks, self.time, self.cpusPerTask,
+                self.memPerCpu, self.nodes, jobName, output, self.slurm.userMail
+            )
+        return textwrap.dedent(command)
 
     def _slurmFooter(self):
         command = """
 
-
-            # Deactivate virtual environment
-            deactivate
-
             # Job end
             date
-
         """
-        return command
+        return textwrap.dedent(command)
 
     def _split_data(self):
         """
@@ -183,14 +184,18 @@ class Task(object):
                 p = _subprocess.Popen("rm {0}".format(self.outputPickles[i]), stdout=_subprocess.PIPE, shell=True)
 
     def _prepare(self):
-        pass
+        """
+        Method used to prepare task to be submitted. Should be overwriten by children as it is specific to a particular task.
+        """
+        self.log = os.path.join(self.slurm.logDir, string.join([self.name, "log"], sep=".")) # add abspath
+        # self._prepare()
 
     def is_running(self):
         """
         Returns True if any job from the task is still running.
         """
         # check if all ids are missing from squeue
-        p = _subprocess.Popen("squeue | unexpand t -t 4 | cut -f 4", stdout=_subprocess.PIPE, shell=True)
+        p = _subprocess.Popen("squeue | unexpand -t 4 | cut -f 4", stdout=_subprocess.PIPE, shell=True)
         processes = p.communicate()[0].split("\n")
 
         if not any([ID in processes for ID in self.jobIDs]):
@@ -220,3 +225,6 @@ class Task(object):
             return False
         self.ready = True
         return True
+
+    def collect(self):
+        return None
