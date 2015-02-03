@@ -3,9 +3,10 @@
 import os as _os
 import time as _time
 import string as _string
+import cPickle as _pickle
 import textwrap as _textwrap
 import subprocess as _subprocess
-import cPickle as _pickle
+from collections import OrderedDict
 
 __author__ = "Andre Rendeiro"
 __copyright__ = "Copyright 2014, Andre F. Rendeiro"
