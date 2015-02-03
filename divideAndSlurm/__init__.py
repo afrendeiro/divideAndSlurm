@@ -103,25 +103,53 @@ class Task(object):
     It will divide the input data into pools, which can be be submitted in parallel to the cluster by the DivideAndSlurm object.
     Divided input can also be further processed in parallel, taking advantage of all CPUs.
     """
-    def __init__(self, data, fractions, queue="shortq", ntasks=1, time="10:00:00", cpusPerTask=16, memPerCpu=2000, nodes=1):
-        #super(Task, self).__init__()
-
+    def __init__(self, data, fractions, *args, **kwargs):
+        super(Task, self).__init__()
+        
         self.name = "Task created at {0}".format(_time.strftime("%Y%m%d%H%M%S", _time.localtime()))
-
+        
         # check data is iterable
         if type(data) == dict or type(data) == OrderedDict:
             data = data.items() # implicit type transformation
         self.data = data
+
         # check fractions is int
         if type(fractions) != int:
             raise TypeError("Fractions must be an integer.")
         self.fractions = fractions
+        # additional arguments which can be used by children tasks
+        self.argv = argv
+        # Check bunch of stuff
+        if "nodes" in kwargs.keys():
+            self.nodes = kwargs["nodes"]
+        else:
+            self.nodes = 1
+        if "ntasks" in kwargs.keys():
+            self.ntasks = kwargs["ntasks"]
+        else:
+            self.ntasks = 1
+        if "queue" in kwargs.keys():
+            self.queue = kwargs["queue"]
+        else:
+            self.queue = "shortq"
+        if "time" in kwargs.keys():
+            self.time = kwargs["time"]
+        else:
+            self.time = "10:00:00"
+        if "cpusPerTask" in kwargs.keys():
+            self.cpusPerTask = kwargs["cpusPerTask"]
+        else:
+            self.cpusPerTask = 16
+        if "memPerCpu" in kwargs.keys():
+            self.memPerCpu = kwargs["memPerCpu"]
+        else:
+            self.memPerCpu = 2000
 
     def __repr__(self):
-        return "Task object " + self.name
+        return self.name
 
     def __str__(self):
-        return "Task object " + self.name
+        return self.name
 
     def _slurmHeader(self, jobID):
         command = """            #!/bin/bash
