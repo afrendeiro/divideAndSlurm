@@ -104,12 +104,12 @@ class Task(object):
     Divided input can also be further processed in parallel, taking advantage of all CPUs.
     """
     def __init__(self, data, fractions, queue="shortq", ntasks=1, time="10:00:00", cpusPerTask=16, memPerCpu=2000, nodes=1):
-        super(Task, self).__init__()
+        #super(Task, self).__init__()
 
         self.name = "Task created at {0}".format(_time.strftime("%Y%m%d%H%M%S", _time.localtime()))
 
         # check data is iterable
-        if type(self.data) == dict or type(self.data) == OrderedDict:
+        if type(data) == dict or type(data) == OrderedDict:
             data = data.items() # implicit type transformation
         self.data = data
         # check fractions is int
@@ -123,7 +123,7 @@ class Task(object):
     def __str__(self):
         return "Task object " + self.name
 
-    def _slurmHeader(self, jobName, output):
+    def _slurmHeader(self, jobID):
         command = """            #!/bin/bash
             #SBATCH --partition={0}
             #SBATCH --ntasks={1}
@@ -144,7 +144,7 @@ class Task(object):
             date
 
             """.format(self.queue, self.ntasks, self.time, self.cpusPerTask,
-                self.memPerCpu, self.nodes, jobName, output, self.slurm.userMail
+                self.memPerCpu, self.nodes, jobID, self.log, self.slurm.userMail
             )
         return textwrap.dedent(command)
 
