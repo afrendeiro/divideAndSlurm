@@ -1,5 +1,6 @@
 #!/usr/env python
 
+import re as _re
 import os as _os
 import time as _time
 import string as _string
@@ -71,8 +72,8 @@ class DivideAndSlurm(object):
 
         jobIDs = list()
         for jobFile in task.jobFiles:
-            output, err = self._slurmSubmitJob(jobFile)
-            jobIDs.append(re.sub("\D", "", output))
+            output, _ = self._slurmSubmitJob(jobFile)
+            jobIDs.append(_re.sub("\D", "", output))
         task.submission_time = _time.time()
         task.jobIDs = jobIDs
 
@@ -181,7 +182,7 @@ class Task(object):
             """.format(self.queue, self.ntasks, self.time, self.cpusPerTask,
                 self.memPerCpu, self.nodes, jobID, self.log, self.slurm.userMail
             )
-        return textwrap.dedent(command)
+        return _textwrap.dedent(command)
 
     def _slurmFooter(self):
         command = """
@@ -189,7 +190,7 @@ class Task(object):
             # Job end
             date
         """
-        return textwrap.dedent(command)
+        return _textwrap.dedent(command)
 
     def _split_data(self):
         """
@@ -215,16 +216,55 @@ class Task(object):
         """
         if hasattr(self, "output"):
             for i in xrange(len(self.jobFiles)):
-                p = _subprocess.Popen("rm {0}".format(self.jobFiles[i]), stdout=_subprocess.PIPE, shell=True)
-                p = _subprocess.Popen("rm {0}".format(self.inputPickles[i]), stdout=_subprocess.PIPE, shell=True)
-                p = _subprocess.Popen("rm {0}".format(self.outputPickles[i]), stdout=_subprocess.PIPE, shell=True)
+                _subprocess.Popen("rm {0}".format(self.jobFiles[i]), stdout=_subprocess.PIPE, shell=True)
+                _subprocess.Popen("rm {0}".format(self.inputPickles[i]), stdout=_subprocess.PIPE, shell=True)
+                _subprocess.Popen("rm {0}".format(self.outputPickles[i]), stdout=_subprocess.PIPE, shell=True)
 
     def _prepare(self):
         """
         Method used to prepare task to be submitted. Should be overwriten by children as it is specific to a particular task.
         """
-        self.log = os.path.join(self.slurm.logDir, string.join([self.name, "log"], sep=".")) # add abspath
-        # self._prepare()
+        self.log = _os.path.join(self.slurm.logDir, _string.join([self.name, "log"], sep=".")) # add abspath
+
+        ### Split data in fractions
+        ids, groups, files = self._split_data()
+
+        ### Make jobs with groups of data
+        self.jobs = list(); self.jobFiles = list(); self.inputPickles = list(); self.outputPickles = list()
+
+        for i in xrange(len(ids)):
+            jobFile = files[i] + "_task.sh"
+            inputPickle = files[i] + ".input.pickle"
+            outputPickle = files[i] + ".output.pickle"
+
+            ### assemble job file
+            # header
+            job = self._slurmHeader(ids[i])
+
+            # command - add abspath!
+            task = """\
+
+                python script_parallel.py {0} {1} """.format(inputPickle, outputPickle)
+            # add more options as needed
+            
+            job += textwrap.dedent(task)
+
+            # footer
+            job += self._slurmFooter()
+
+            # add to save attributes
+            self.jobs.append(job)
+            self.jobFiles.append(jobFile)
+            self.inputPickles.append(inputPickle)
+            self.outputPickles.append(outputPickle)
+
+            # write job file to disk
+            with open(jobFile, 'w') as handle:
+                handle.write(textwrap.dedent(job))
+
+        # Delete data if jobs are ready to submit and data is serialized
+        if hasattr(self, "jobs") and hasattr(self, "jobFiles"):
+            del self.data
 
     def is_running(self):
         """
