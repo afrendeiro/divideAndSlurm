@@ -74,7 +74,7 @@ class DivideAndSlurm(object):
             output, err = self._slurmSubmitJob(jobFile)
             jobIDs.append(re.sub("\D", "", output))
         task.submission_time = _time.time()
-        tasks.jobIDs = jobIDs
+        task.jobIDs = jobIDs
 
     def cancel_task(self, task):
         """
@@ -84,16 +84,21 @@ class DivideAndSlurm(object):
             raise AttributeError("Task not in object's tasks.")
         if not hasattr(task, "jobIDs"):
             raise AttributeError("Task does not have jobs initiated.")
+
+        p = _subprocess.Popen("squeue | unexpand -t 4 | cut -f 4", stdout=_subprocess.PIPE, shell=True)
+        processes = p.communicate()[0].split("\n")
+
         for jobID in task.jobIDs:
-            command = "scancel %s" % jobID
-            p = _subprocess.Popen(command, stdout=_subprocess.PIPE, shell=True)            
+            if jobID in processes:
+                command = "scancel {0}".format(jobID)
+                p = _subprocess.Popen(command, stdout=_subprocess.PIPE, shell=True)            
 
     def remove_task(self, task):
         """
         Remove task from object.
         """
-        return self.tasks.pop(self.tasks.index(task))
-
+        #return self.tasks.pop(self.tasks.index(task))
+        del self.tasks[self.tasks.index(task)]
 
 
 class Task(object):
@@ -118,7 +123,7 @@ class Task(object):
             raise TypeError("Fractions must be an integer.")
         self.fractions = fractions
         # additional arguments which can be used by children tasks
-        self.argv = argv
+        self.args = args
         # Check bunch of stuff
         if "nodes" in kwargs.keys():
             self.nodes = kwargs["nodes"]
@@ -166,6 +171,8 @@ class Task(object):
 
             #SBATCH --mail-type=end
             #SBATCH --mail-user={8}
+
+            #SBATCH --exclude=n005
 
             # Start running the job
             hostname
@@ -257,3 +264,5 @@ class Task(object):
 
     def collect(self):
         return None
+
+        
