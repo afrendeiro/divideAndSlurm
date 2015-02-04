@@ -247,7 +247,7 @@ class Task(object):
                 python script_parallel.py {0} {1} """.format(inputPickle, outputPickle)
             # add more options as needed
             
-            job += textwrap.dedent(task)
+            job += _textwrap.dedent(task)
 
             # footer
             job += self._slurmFooter()
@@ -260,7 +260,7 @@ class Task(object):
 
             # write job file to disk
             with open(jobFile, 'w') as handle:
-                handle.write(textwrap.dedent(job))
+                handle.write(_textwrap.dedent(job))
 
         # Delete data if jobs are ready to submit and data is serialized
         if hasattr(self, "jobs") and hasattr(self, "jobFiles"):
