@@ -296,9 +296,10 @@ class Task(object):
         if not hasattr(self, "jobIDs"): # if not even started
             return False
 
-        # if is not running and has output
+        # if is running or does not have output = not ready
         if self.is_running() or not self.has_output():
             return False
+        # if is not running and has output = ready
         self.ready = True
         return True
 
