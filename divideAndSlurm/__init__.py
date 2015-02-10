@@ -1,13 +1,14 @@
 #!/usr/env python
 
-import re as _re
-import os as _os
-import time as _time
-import string as _string
-import cPickle as _pickle
-import textwrap as _textwrap
-import subprocess as _subprocess
+import re
+import os
+import time
+import string
+import cPickle
+import textwrap
+import subprocess
 from collections import OrderedDict
+import string, time, random, textwrap
 
 __author__ = "Andre Rendeiro"
 __copyright__ = "Copyright 2014, Andre F. Rendeiro"
@@ -28,10 +29,10 @@ class DivideAndSlurm(object):
 
         self.tasks = list()
 
-        self.name = _string.join(["DivideAndSlurm", _time.strftime("%Y%m%d%H%M%S", _time.localtime())], sep="_")
+        self.name = string.join(["DivideAndSlurm", time.strftime("%Y%m%d%H%M%S", time.localtime())], sep="_")
 
-        self.tmpDir = _os.path.abspath(tmpDir)
-        self.logDir = _os.path.abspath(logDir)
+        self.tmpDir = os.path.abspath(tmpDir)
+        self.logDir = os.path.abspath(logDir)
 
         self.userMail = userMail
 
@@ -46,7 +47,7 @@ class DivideAndSlurm(object):
         Submit command to shell.
         """
         command = "sbatch %s" % jobFile
-        p = _subprocess.Popen(command, stdout=_subprocess.PIPE, shell=True)
+        p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
         return p.communicate()
 
     def add_task(self, task):
@@ -73,8 +74,8 @@ class DivideAndSlurm(object):
         jobIDs = list()
         for jobFile in task.jobFiles:
             output, _ = self._slurmSubmitJob(jobFile)
-            jobIDs.append(_re.sub("\D", "", output))
-        task.submission_time = _time.time()
+            jobIDs.append(re.sub("\D", "", output))
+        task.submissiontime = time.time()
         task.jobIDs = jobIDs
 
     def cancel_task(self, task):
@@ -86,13 +87,13 @@ class DivideAndSlurm(object):
         if not hasattr(task, "jobIDs"):
             raise AttributeError("Task does not have jobs initiated.")
 
-        p = _subprocess.Popen("squeue | unexpand -t 4 | cut -f 4", stdout=_subprocess.PIPE, shell=True)
+        p = subprocess.Popen("squeue | unexpand -t 4 | cut -f 4", stdout=subprocess.PIPE, shell=True)
         processes = p.communicate()[0].split("\n")
 
         for jobID in task.jobIDs:
             if jobID in processes:
                 command = "scancel {0}".format(jobID)
-                p = _subprocess.Popen(command, stdout=_subprocess.PIPE, shell=True)            
+                p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)            
 
     def remove_task(self, task):
         """
@@ -112,7 +113,7 @@ class Task(object):
     def __init__(self, data, fractions, *args, **kwargs):
         super(Task, self).__init__()
         
-        self.name = "Task created at {0}".format(_time.strftime("%Y%m%d%H%M%S", _time.localtime()))
+        self.name = time.strftime("%Y%m%d%H%M%S", time.localtime())
         
         # check data is iterable
         if type(data) == dict or type(data) == OrderedDict:
@@ -125,6 +126,13 @@ class Task(object):
         self.fractions = fractions
         # additional arguments which can be used by children tasks
         self.args = args
+
+        # permissive output collection
+        if "permissive" in kwargs.keys():
+            self.permissive = kwargs["permissive"]
+        else:
+            self.permissive = False
+
         # Check bunch of stuff
         if "nodes" in kwargs.keys():
             self.nodes = kwargs["nodes"]
@@ -173,8 +181,6 @@ class Task(object):
             #SBATCH --mail-type=end
             #SBATCH --mail-user={8}
 
-            #SBATCH --exclude=n005
-
             # Start running the job
             hostname
             date
@@ -182,7 +188,7 @@ class Task(object):
             """.format(self.queue, self.ntasks, self.time, self.cpusPerTask,
                 self.memPerCpu, self.nodes, jobID, self.log, self.slurm.userMail
             )
-        return _textwrap.dedent(command)
+        return textwrap.dedent(command)
 
     def _slurmFooter(self):
         command = """
@@ -190,7 +196,7 @@ class Task(object):
             # Job end
             date
         """
-        return _textwrap.dedent(command)
+        return textwrap.dedent(command)
 
     def _split_data(self):
         """
@@ -199,14 +205,14 @@ class Task(object):
         chunkify = lambda lst,n: [lst[i::n] for i in xrange(n)]
 
         groups = chunkify(self.data, self.fractions)
-        ids = [_string.join([self.name, str(i)], sep="_") for i in xrange(len(groups))]
-        files = [_os.path.join(self.slurm.tmpDir, ID) for ID in ids]
+        ids = [string.join([self.name, str(i)], sep="_") for i in xrange(len(groups))]
+        files = [os.path.join(self.slurm.tmpDir, ID) for ID in ids]
         
         # serialize groups
         for i in xrange(len(groups)):
-            _pickle.dump(groups[i],                  # actual objects
+            pickle.dump(groups[i],                  # actual objects
                 open(files[i] + ".input.pickle", 'wb'),  # input pickle file
-                protocol=_pickle.HIGHEST_PROTOCOL
+                protocol=pickle.HIGHEST_PROTOCOL
             )
         return (ids, groups, files)
 
@@ -216,15 +222,15 @@ class Task(object):
         """
         if hasattr(self, "output"):
             for i in xrange(len(self.jobFiles)):
-                _subprocess.Popen("rm {0}".format(self.jobFiles[i]), stdout=_subprocess.PIPE, shell=True)
-                _subprocess.Popen("rm {0}".format(self.inputPickles[i]), stdout=_subprocess.PIPE, shell=True)
-                _subprocess.Popen("rm {0}".format(self.outputPickles[i]), stdout=_subprocess.PIPE, shell=True)
+                subprocess.Popen("rm {0}".format(self.jobFiles[i]), stdout=subprocess.PIPE, shell=True)
+                subprocess.Popen("rm {0}".format(self.inputPickles[i]), stdout=subprocess.PIPE, shell=True)
+                subprocess.Popen("rm {0}".format(self.outputPickles[i]), stdout=subprocess.PIPE, shell=True)
 
     def _prepare(self):
         """
-        Method used to prepare task to be submitted. Should be overwriten by children as it is specific to a particular task.
+        Method used to prepare task to be submitted. Should be overwriten by children
         """
-        self.log = _os.path.join(self.slurm.logDir, _string.join([self.name, "log"], sep=".")) # add abspath
+        self.log = os.path.join(self.slurm.logDir, string.join([self.name, "log"], sep=".")) # add abspath
 
         ### Split data in fractions
         ids, groups, files = self._split_data()
@@ -237,7 +243,7 @@ class Task(object):
             inputPickle = files[i] + ".input.pickle"
             outputPickle = files[i] + ".output.pickle"
 
-            ### assemble job file
+            ###
             # header
             job = self._slurmHeader(ids[i])
 
@@ -245,9 +251,9 @@ class Task(object):
             task = """\
 
                 python script_parallel.py {0} {1} """.format(inputPickle, outputPickle)
-            # add more options as needed
+            # add more options
             
-            job += _textwrap.dedent(task)
+            job += textwrap.dedent(task)
 
             # footer
             job += self._slurmFooter()
@@ -259,8 +265,8 @@ class Task(object):
             self.outputPickles.append(outputPickle)
 
             # write job file to disk
-            with open(jobFile, 'w') as handle:
-                handle.write(_textwrap.dedent(job))
+            with open(jobFile, 'w'):
+                handle.write(textwrap.dedent(job))
 
         # Delete data if jobs are ready to submit and data is serialized
         if hasattr(self, "jobs") and hasattr(self, "jobFiles"):
@@ -271,7 +277,7 @@ class Task(object):
         Returns True if any job from the task is still running.
         """
         # check if all ids are missing from squeue
-        p = _subprocess.Popen("squeue | unexpand -t 4 | cut -f 4", stdout=_subprocess.PIPE, shell=True)
+        p = subprocess.Popen("squeue | unexpand -t 4 | cut -f 4", stdout=subprocess.PIPE, shell=True)
         processes = p.communicate()[0].split("\n")
 
         if not any([ID in processes for ID in self.jobIDs]):
@@ -283,7 +289,7 @@ class Task(object):
         Returns True is all output pickles are present.
         """
         # check if all output pickles are produced
-        if not any([_os.path.isfile(outputPickle) for outputPickle in self.outputPickles]):
+        if not any([os.path.isfile(outputPickle) for outputPickle in self.outputPickles]):
             return False
         return True
 
@@ -303,7 +309,36 @@ class Task(object):
         self.ready = True
         return True
 
-    def collect(self):
-        return None
+    def failed(self):
+        """
+        Check if task failed.
+        """
+        if self.is_ready() and not self.is_running() and not hasattr(self, "output"):
+            return True
+        else:
+            return False
 
-        
+    def collect(self):
+        """
+        If self.is_ready(), return joined reduced data.
+        """
+        if hasattr(self, "output"): # if output is already stored, just return it
+            return self.output
+
+        if self.is_ready():
+            # load all pickles into list
+            if self.permissive:
+                outputs = [pickle.load(open(outputPickle, 'r')) for outputPickle in self.outputPickles if os.path.isfile(outputPickle)]
+            else:
+                outputs = [pickle.load(open(outputPickle, 'r')) for outputPickle in self.outputPickles]
+            # if all are counters, and their elements are counters, sum them
+
+            ### THE FOLLOWING PART SHOULD BE SPECIFIC TO EACH TASK:
+            if all([type(outputs[i]) == Counter for i in range(len(outputs))]):
+                output = reduce(lambda x, y: x + y, outputs) # reduce
+                if type(output) == Counter:
+                    self.output = output    # store output in object
+                    self._rm_temps() # delete tmp files
+                    return self.output
+        else:
+            raise TypeError("Task is not ready yet.")
