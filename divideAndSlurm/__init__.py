@@ -4,11 +4,11 @@ import re
 import os
 import time
 import string
-import cPickle
+import random
+import cPickle as pickle
 import textwrap
 import subprocess
-from collections import OrderedDict
-import string, time, random, textwrap
+from collections import OrderedDict, Counter
 
 __author__ = "Andre Rendeiro"
 __copyright__ = "Copyright 2014, Andre F. Rendeiro"
@@ -113,7 +113,8 @@ class Task(object):
     def __init__(self, data, fractions, *args, **kwargs):
         super(Task, self).__init__()
         
-        self.name = time.strftime("%Y%m%d%H%M%S", time.localtime())
+        now = string.join([time.strftime("%Y%m%d%H%M%S", time.localtime()), str(random.randint(1,1000))], sep="_")
+        self.name = "task_{0}".format(now)
         
         # check data is iterable
         if type(data) == dict or type(data) == OrderedDict:
@@ -265,7 +266,7 @@ class Task(object):
             self.outputPickles.append(outputPickle)
 
             # write job file to disk
-            with open(jobFile, 'w'):
+            with open(jobFile, 'w') as handle:
                 handle.write(textwrap.dedent(job))
 
         # Delete data if jobs are ready to submit and data is serialized
@@ -322,23 +323,23 @@ class Task(object):
         """
         If self.is_ready(), return joined reduced data.
         """
-        if hasattr(self, "output"): # if output is already stored, just return it
-            return self.output
+        if not hasattr(self, "output"): # if output is already stored, just return it
+            if self.is_ready():
+                # load all pickles into list
+                if self.permissive:
+                    outputs = [pickle.load(open(outputPickle, 'r')) for outputPickle in self.outputPickles if os.path.isfile(outputPickle)]
+                else:
+                    outputs = [pickle.load(open(outputPickle, 'r')) for outputPickle in self.outputPickles]
+                # if all are counters, and their elements are counters, sum them
 
-        if self.is_ready():
-            # load all pickles into list
-            if self.permissive:
-                outputs = [pickle.load(open(outputPickle, 'r')) for outputPickle in self.outputPickles if os.path.isfile(outputPickle)]
+                ### THE FOLLOWING PART SHOULD BE SPECIFIC TO EACH TASK:
+                if all([type(outputs[i]) == Counter for i in range(len(outputs))]):
+                    output = reduce(lambda x, y: x + y, outputs) # reduce
+                    if type(output) == Counter:
+                        self.output = output    # store output in object
+                        self._rm_temps() # delete tmp files
+                        return self.output
             else:
-                outputs = [pickle.load(open(outputPickle, 'r')) for outputPickle in self.outputPickles]
-            # if all are counters, and their elements are counters, sum them
-
-            ### THE FOLLOWING PART SHOULD BE SPECIFIC TO EACH TASK:
-            if all([type(outputs[i]) == Counter for i in range(len(outputs))]):
-                output = reduce(lambda x, y: x + y, outputs) # reduce
-                if type(output) == Counter:
-                    self.output = output    # store output in object
-                    self._rm_temps() # delete tmp files
-                    return self.output
+                raise TypeError("Task is not ready yet.")
         else:
-            raise TypeError("Task is not ready yet.")
+            return self.output
