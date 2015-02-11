@@ -93,13 +93,31 @@ class DivideAndSlurm(object):
         for jobID in task.jobIDs:
             if jobID in processes:
                 command = "scancel {0}".format(jobID)
-                p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)            
+                p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
+
+    def cancel_all_tasks(self, task):
+        """
+        Submit slurm jobs with each fraction of data.
+        """
+        raise NotImplementedError("")
+        if task not in self.tasks:
+            raise AttributeError("Task not in object's tasks.")
+        if not hasattr(task, "jobIDs"):
+            raise AttributeError("Task does not have jobs initiated.")
+
+        p = subprocess.Popen("squeue | unexpand -t 4 | cut -f 4", stdout=subprocess.PIPE, shell=True)
+        processes = p.communicate()[0].split("\n")
+
+        for jobID in task.jobIDs:
+            if jobID in processes:
+                command = "scancel {0}".format(jobID)
+                p = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
 
     def remove_task(self, task):
         """
         Remove task from object.
         """
-        #return self.tasks.pop(self.tasks.index(task))
+        # return self.tasks.pop(self.tasks.index(task))
         del self.tasks[self.tasks.index(task)]
 
 
@@ -109,16 +127,25 @@ class Task(object):
 
     It will divide the input data into pools, which can be be submitted in parallel to the cluster by the DivideAndSlurm object.
     Divided input can also be further processed in parallel, taking advantage of all CPUs.
+
+    kwargs passed uppon initialization are:
+        - permissive
+        - nodes
+        - ntasks
+        - queue
+        - time
+        - cpusPerTask
+        - memPerCpu
     """
     def __init__(self, data, fractions, *args, **kwargs):
         super(Task, self).__init__()
-        
-        now = string.join([time.strftime("%Y%m%d%H%M%S", time.localtime()), str(random.randint(1,1000))], sep="_")
+
+        now = string.join([time.strftime("%Y%m%d%H%M%S", time.localtime()), str(random.randint(1, 1000))], sep="_")
         self.name = "task_{0}".format(now)
-        
+
         # check data is iterable
-        if type(data) == dict or type(data) == OrderedDict:
-            data = data.items() # implicit type transformation
+        if type(data) in [dict, OrderedDict]:
+            data = data.items()  # implicit type transformation
         self.data = data
 
         # check fractions is int
@@ -187,8 +214,8 @@ class Task(object):
             date
 
             """.format(self.queue, self.ntasks, self.time, self.cpusPerTask,
-                self.memPerCpu, self.nodes, jobID, self.log, self.slurm.userMail
-            )
+                       self.memPerCpu, self.nodes, jobID, self.log, self.slurm.userMail
+                       )
         return textwrap.dedent(command)
 
     def _slurmFooter(self):
@@ -203,18 +230,19 @@ class Task(object):
         """
         Split data in fractions and create pickle objects with them.
         """
-        chunkify = lambda lst,n: [lst[i::n] for i in xrange(n)]
+        def _chunkify(lst, n):
+            return [lst[i::n] for i in xrange(n)]
 
-        groups = chunkify(self.data, self.fractions)
+        groups = _chunkify(self.data, self.fractions)
         ids = [string.join([self.name, str(i)], sep="_") for i in xrange(len(groups))]
         files = [os.path.join(self.slurm.tmpDir, ID) for ID in ids]
-        
+
         # serialize groups
         for i in xrange(len(groups)):
-            pickle.dump(groups[i],                  # actual objects
-                open(files[i] + ".input.pickle", 'wb'),  # input pickle file
-                protocol=pickle.HIGHEST_PROTOCOL
-            )
+            pickle.dump(groups[i],  # actual objects
+                        open(files[i] + ".input.pickle", 'wb'),  # input pickle file
+                        protocol=pickle.HIGHEST_PROTOCOL
+                        )
         return (ids, groups, files)
 
     def _rm_temps(self):
@@ -231,12 +259,12 @@ class Task(object):
         """
         Method used to prepare task to be submitted. Should be overwriten by children
         """
-        self.log = os.path.join(self.slurm.logDir, string.join([self.name, "log"], sep=".")) # add abspath
+        self.log = os.path.join(self.slurm.logDir, string.join([self.name, "log"], sep="."))  # add abspath
 
-        ### Split data in fractions
+        # Split data in fractions
         ids, groups, files = self._split_data()
 
-        ### Make jobs with groups of data
+        # Make jobs with groups of data
         self.jobs = list(); self.jobFiles = list(); self.inputPickles = list(); self.outputPickles = list()
 
         for i in xrange(len(ids)):
@@ -253,7 +281,7 @@ class Task(object):
 
                 python script_parallel.py {0} {1} """.format(inputPickle, outputPickle)
             # add more options
-            
+
             job += textwrap.dedent(task)
 
             # footer
@@ -298,9 +326,9 @@ class Task(object):
         """
         Check if all submitted jobs have been completed.
         """
-        if hasattr(self, "ready"): # if already finished
+        if hasattr(self, "ready"):  # if already finished
             return True
-        if not hasattr(self, "jobIDs"): # if not even started
+        if not hasattr(self, "jobIDs"):  # if not even started
             return False
 
         # if is running or does not have output = not ready
@@ -323,7 +351,7 @@ class Task(object):
         """
         If self.is_ready(), return joined reduced data.
         """
-        if not hasattr(self, "output"): # if output is already stored, just return it
+        if not hasattr(self, "output"):  # if output is already stored, just return it
             if self.is_ready():
                 # load all pickles into list
                 if self.permissive:
@@ -332,12 +360,12 @@ class Task(object):
                     outputs = [pickle.load(open(outputPickle, 'r')) for outputPickle in self.outputPickles]
                 # if all are counters, and their elements are counters, sum them
 
-                ### THE FOLLOWING PART SHOULD BE SPECIFIC TO EACH TASK:
+                # THE FOLLOWING PART SHOULD BE SPECIFIC TO EACH TASK:
                 if all([type(outputs[i]) == Counter for i in range(len(outputs))]):
-                    output = reduce(lambda x, y: x + y, outputs) # reduce
+                    output = reduce(lambda x, y: x + y, outputs)  # reduce
                     if type(output) == Counter:
-                        self.output = output    # store output in object
-                        self._rm_temps() # delete tmp files
+                        self.output = output  # store output in object
+                        self._rm_temps()  # delete tmp files
                         return self.output
             else:
                 raise TypeError("Task is not ready yet.")
