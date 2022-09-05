@@ -1,0 +1,51 @@
+[project]
+name = "divideAndSlurm"
+description = "Map-reduce style submission of jobs to a Slurm cluster."
+authors = [
+    {name = "Andre Rendeiro", email = "arendeiro@cemm.at"},
+]
+readme = "README.md"
+keywords = [
+    
+]
+classifiers = [
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Development Status :: 3 - Alpha",
+    "Typing :: Typed",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "setuptools_scm"
+]
+dynamic = ['version']
+
+[project.optional-dependencies]
+dev = [
+    "wheel",
+    "ipython",
+    "black[d]",
+    "mypy>=0.900",  # pin to version supporting pyproject.toml
+    "pylint",
+    "flake8",
+    "git-lint",
+    "pydocstyle",
+]
+
+[project.urls]
+homepage = "https://github.com/afrendeiro/divideAndSlurm"
+repository = "https://github.com/afrendeiro/divideAndSlurm"
+documentation = "https://github.com/afrendeiro/divideAndSlurm"
+changelog = "https://github.com/afrendeiro/divideAndSlurm/blob/master/docs/source/changelog.md"
+
+[build-system]
+build-backend = "setuptools.build_meta"
+requires = ["setuptools>=45", "wheel", "setuptools_scm[toml]>=6.0"]
+
+[tool.setuptools_scm]
+write_to = "divideAndSlurm/_version.py"
+write_to_template = 'version = __version__ = "{version}"'
+
+[tool.ruff]
+line-length = 90
